@@ -2,10 +2,6 @@ Nova-PS1
 
 Nova-PS1 is a Sony PlayStation 1 emulator written from scratch in C++20. The project focuses on low-level emulation: MIPS R3000A, GTE, GPU, SPU, DMA, Timers, CD-ROM, BIOS HLE, and Pad.
 
-https://img.shields.io/badge/C%252B%252B-20-00599C?logo=cplusplus
-https://img.shields.io/badge/CMake-3.20%252B-064F8C?logo=cmake
-https://img.shields.io/badge/license-MIT-green
-https://img.shields.io/badge/platform-Windows%2520%257C%2520Linux%2520%257C%2520macOS-lightgrey
 Table of Contents
 
     Overview
