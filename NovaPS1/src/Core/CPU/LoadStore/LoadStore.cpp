@@ -1,7 +1,6 @@
 #include "LoadStore.hpp"
 #include "../MIPS.hpp"
 #include "../Registers.hpp"
-#include "../../Memory/Bus.hpp"
 
 namespace nova::ps1::loadstore {
 
@@ -13,32 +12,32 @@ void LB(MIPS& cpu, uint32_t opcode) {
     Registers& regs = cpu.GetRegisters();
     uint32_t addr = regs.GetGPR(Rs(opcode)) + static_cast<uint32_t>(Simm16(opcode));
     int8_t value = static_cast<int8_t>(cpu.GetBus().Read8(addr));
-    regs.SetGPR(Rt(opcode), static_cast<uint32_t>(static_cast<int32_t>(value)));
+    cpu.QueueLoadWrite(Rt(opcode), static_cast<uint32_t>(static_cast<int32_t>(value)));
 }
 
 void LBU(MIPS& cpu, uint32_t opcode) {
     Registers& regs = cpu.GetRegisters();
     uint32_t addr = regs.GetGPR(Rs(opcode)) + static_cast<uint32_t>(Simm16(opcode));
-    regs.SetGPR(Rt(opcode), cpu.GetBus().Read8(addr));
+    cpu.QueueLoadWrite(Rt(opcode), cpu.GetBus().Read8(addr));
 }
 
 void LH(MIPS& cpu, uint32_t opcode) {
     Registers& regs = cpu.GetRegisters();
     uint32_t addr = regs.GetGPR(Rs(opcode)) + static_cast<uint32_t>(Simm16(opcode));
     int16_t value = static_cast<int16_t>(cpu.GetBus().Read16(addr));
-    regs.SetGPR(Rt(opcode), static_cast<uint32_t>(static_cast<int32_t>(value)));
+    cpu.QueueLoadWrite(Rt(opcode), static_cast<uint32_t>(static_cast<int32_t>(value)));
 }
 
 void LHU(MIPS& cpu, uint32_t opcode) {
     Registers& regs = cpu.GetRegisters();
     uint32_t addr = regs.GetGPR(Rs(opcode)) + static_cast<uint32_t>(Simm16(opcode));
-    regs.SetGPR(Rt(opcode), cpu.GetBus().Read16(addr));
+    cpu.QueueLoadWrite(Rt(opcode), cpu.GetBus().Read16(addr));
 }
 
 void LW(MIPS& cpu, uint32_t opcode) {
     Registers& regs = cpu.GetRegisters();
     uint32_t addr = regs.GetGPR(Rs(opcode)) + static_cast<uint32_t>(Simm16(opcode));
-    regs.SetGPR(Rt(opcode), cpu.GetBus().Read32(addr));
+    cpu.QueueLoadWrite(Rt(opcode), cpu.GetBus().Read32(addr));
 }
 
 void LWL(MIPS& cpu, uint32_t opcode) {

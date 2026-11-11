@@ -1,9 +1,6 @@
 #pragma once
 #include <cstdint>
 #include <array>
-#include <vector>
-#include <functional>
-#include "IBusDevice.hpp"
 
 namespace nova::ps1 {
 
@@ -28,6 +25,8 @@ public:
     void AttachMMIO(uint32_t base, uint32_t size, IBusDevice* device);
 
     uint32_t ResolveAddress(uint32_t address) const;
+    void SetIsolateCache(bool enabled) { _isolateCache = enabled; }
+    bool IsCacheIsolated() const { return _isolateCache; }
 
 private:
     std::array<uint8_t, 0x200000> _ram;
@@ -35,6 +34,7 @@ private:
     std::array<uint8_t, 0x80000>  _bios;
 
     bool _biosLoaded;
+    bool _isolateCache;
 
     struct MappedDevice {
         uint32_t base;

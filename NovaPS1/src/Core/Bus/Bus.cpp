@@ -3,7 +3,7 @@
 
 namespace nova::ps1 {
 
-Bus::Bus() : _biosLoaded(false) {
+Bus::Bus() : _biosLoaded(false), _isolateCache(false) {
     Reset();
 }
 
@@ -12,6 +12,7 @@ void Bus::Reset() {
     _scratchpad.fill(0);
     _bios.fill(0);
     _biosLoaded = false;
+    _isolateCache = false;
     _devices.clear();
 }
 
@@ -110,6 +111,9 @@ void Bus::Write8(uint32_t address, uint8_t value) {
     }
 
     if (IsRam(phys)) {
+        if (_isolateCache) {
+            return;
+        }
         _ram[phys & 0x1FFFFF] = value;
         return;
     }
@@ -129,6 +133,10 @@ void Bus::Write16(uint32_t address, uint16_t value) {
         return;
     }
 
+    if (IsRam(phys) && _isolateCache) {
+        return;
+    }
+
     Write8(phys, static_cast<uint8_t>(value & 0xFF));
     Write8(phys + 1, static_cast<uint8_t>((value >> 8) & 0xFF));
 }
@@ -140,6 +148,10 @@ void Bus::Write32(uint32_t address, uint32_t value) {
     IBusDevice* dev = FindDevice(phys, offset);
     if (dev) {
         dev->Write(offset, value, 4);
+        return;
+    }
+
+    if (IsRam(phys) && _isolateCache) {
         return;
     }
 
