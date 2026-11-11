@@ -6,13 +6,21 @@
 #include "LoadStore/LoadStore.hpp"
 #include "Special/Special.hpp"
 #include "FPU/FPU.hpp"
+#include "GTE/GTE.hpp"
+#include "GTE/GTE_Transform.hpp"
+#include "GTE/GTE_Light.hpp"
+#include "GTE/GTE_Vector.hpp"
+#include "GTE/GTE_Color.hpp"
+#include "GTE/GTE_Depth.hpp"
+#include "GTE/GTE_Memory.hpp"
 #include <iostream>
 
 namespace nova::ps1 {
 
 MIPS::MIPS(Bus& bus)
-    : _bus(bus), _regs(), _tlb(), _icache(), _dcache(), _interrupts(),
-      _delaySlotTarget(0), _inDelaySlot(false), _cycleCount(0) {
+    : _bus(bus), _regs(), _tlb(), _icache(), _dcache(), _interrupts(), _gte(),
+      _delaySlotTarget(0), _inDelaySlot(false), _cycleCount(0),
+      _loadDelayValid(false), _loadDelayReg(0), _loadDelayValue(0) {
     InitTables();
 }
 
@@ -22,9 +30,14 @@ void MIPS::Reset() {
     _icache.Reset();
     _dcache.Reset();
     _interrupts.Reset();
+    _gte.Reset();
     _delaySlotTarget = 0;
     _inDelaySlot = false;
     _cycleCount = 0;
+    _loadDelayValid = false;
+    _loadDelayReg = 0;
+    _loadDelayValue = 0;
+    _bus.SetIsolateCache(false);
 }
 
 void MIPS::InitTables() {
@@ -67,7 +80,9 @@ void MIPS::InitTables() {
     _primaryTable[0x2A] = &loadstore::SWL;
     _primaryTable[0x2B] = &loadstore::SW;
     _primaryTable[0x2E] = &loadstore::SWR;
+    _primaryTable[0x31] = &op_lwc1;
     _primaryTable[0x32] = &op_lwc2;
+    _primaryTable[0x39] = &op_swc1;
     _primaryTable[0x3A] = &op_swc2;
 
     _specialTable[0x00] = &shift::SLL;
@@ -126,6 +141,12 @@ void MIPS::InitTables() {
     _cop1SFuncTable[0x3A] = &fpu::C_LE_S;
 }
 
+void MIPS::QueueLoadWrite(uint32_t reg, uint32_t value) {
+    _loadDelayReg = reg;
+    _loadDelayValue = value;
+    _loadDelayValid = true;
+}
+
 void MIPS::Step() {
     uint32_t currentPc = _regs.GetPC();
 
@@ -136,27 +157,34 @@ void MIPS::Step() {
     }
 
     uint32_t opcode = _bus.Read32(currentPc);
-
     _regs.SetNextPC(currentPc + 4);
+
+    bool wasDelaySlot = _inDelaySlot;
+    _inDelaySlot = false;
 
     Execute(opcode);
 
-    if (_inDelaySlot) {
-        uint32_t delayPc = _regs.GetNextPC();
-        uint32_t delayOpcode = _bus.Read32(delayPc);
-        _regs.SetPC(delayPc);
-        _regs.SetNextPC(delayPc + 4);
-
-        uint32_t savedDelayTarget = _delaySlotTarget;
-        _inDelaySlot = false;
-
-        Execute(delayOpcode);
-
-        _regs.SetPC(savedDelayTarget);
-        _regs.SetNextPC(savedDelayTarget + 4);
-        _inDelaySlot = false;
+    if (wasDelaySlot) {
+        if (_delaySlotTarget != 0) {
+            _regs.SetPC(_delaySlotTarget);
+            _regs.SetNextPC(_delaySlotTarget + 4);
+            _delaySlotTarget = 0;
+            _inDelaySlot = false;
+        } else {
+            _regs.SetPC(_regs.GetNextPC());
+            _regs.SetNextPC(_regs.GetPC() + 4);
+        }
+    } else if (_inDelaySlot) {
+        _regs.SetPC(_regs.GetNextPC());
+        _regs.SetNextPC(_delaySlotTarget);
     } else {
         _regs.SetPC(_regs.GetNextPC());
+        _regs.SetNextPC(_regs.GetPC() + 4);
+    }
+
+    if (_loadDelayValid) {
+        _regs.SetGPR(_loadDelayReg, _loadDelayValue);
+        _loadDelayValid = false;
     }
 
     _cycleCount++;
@@ -164,7 +192,11 @@ void MIPS::Step() {
 
 void MIPS::Execute(uint32_t opcode) {
     uint32_t primary = (opcode >> 26) & 0x3F;
-    _primaryTable[primary](*this, opcode);
+    if (primary < _primaryTable.size()) {
+        _primaryTable[primary](*this, opcode);
+    } else {
+        op_unknown(opcode);
+    }
 }
 
 void MIPS::SetBranchTarget(uint32_t target) {
@@ -175,18 +207,21 @@ void MIPS::SetBranchTarget(uint32_t target) {
 void MIPS::HandleException(uint32_t cause) {
     uint32_t status = _regs.GetCOP0(12);
     uint32_t epc = _regs.GetPC();
+    uint32_t bd = 0;
 
     if (_inDelaySlot) {
-        epc -= 4;
+        epc = _regs.GetPC() - 4;
+        bd = 0x80000000u;
     }
 
-    _regs.SetCOP0(13, cause << 2);
+    _regs.SetCOP0(13, (bd | (cause << 2)) & 0xFFFFFFFFu);
     _regs.SetCOP0(14, epc);
 
-    uint32_t vector = (status & 0x00400000) ? 0x80000180 : 0xBFC00180;
+    uint32_t vector = (status & 0x00400000u) ? 0x80000180u : 0xBFC00180u;
     _regs.SetPC(vector);
     _regs.SetNextPC(vector + 4);
     _inDelaySlot = false;
+    _loadDelayValid = false;
 }
 
 void MIPS::op_unknown(uint32_t opcode) {
@@ -209,6 +244,7 @@ void MIPS::op_cop0(uint32_t opcode) {
     uint32_t rs = Rs(opcode);
     uint32_t rt = Rt(opcode);
     uint32_t rd = Rd(opcode);
+    uint32_t func = Func(opcode);
 
     switch (rs) {
         case 0x00:
@@ -216,8 +252,18 @@ void MIPS::op_cop0(uint32_t opcode) {
             break;
         case 0x04:
             _regs.SetCOP0(rd, _regs.GetGPR(rt));
+            if (rd == 12) {
+                _bus.SetIsolateCache((_regs.GetCOP0(12) & (1u << 16)) != 0);
+            }
             break;
         case 0x10:
+            if (func == 0x10) {
+                uint32_t sr = _regs.GetCOP0(12);
+                _regs.SetCOP0(12, (sr & ~0x0Fu) | ((sr >> 2) & 0x0Fu));
+                _bus.SetIsolateCache((_regs.GetCOP0(12) & (1u << 16)) != 0);
+            } else {
+                op_unknown(opcode);
+            }
             break;
         default:
             op_unknown(opcode);
@@ -226,41 +272,8 @@ void MIPS::op_cop0(uint32_t opcode) {
 }
 
 void MIPS::op_cop1(uint32_t opcode) {
-    uint32_t rs = Rs(opcode);
-    uint32_t rt = Rt(opcode);
-    uint32_t rd = Rd(opcode);
-
-    switch (rs) {
-        case 0x00:
-            fpu::MFC1(*this, opcode);
-            break;
-        case 0x02:
-            fpu::CFC1(*this, opcode);
-            break;
-        case 0x04:
-            fpu::MTC1(*this, opcode);
-            break;
-        case 0x06:
-            fpu::CTC1(*this, opcode);
-            break;
-        case 0x08:
-        {
-            uint32_t fmt = (opcode >> 21) & 0x1F;
-            uint32_t func = Func(opcode);
-
-            if (fmt == 0x10) {
-                _cop1SFuncTable[func](*this, opcode);
-            } else if (fmt == 0x11) {
-                _cop1SFuncTable[func](*this, opcode);
-            } else {
-                op_unknown(opcode);
-            }
-            break;
-        }
-        default:
-            op_unknown(opcode);
-            break;
-    }
+    (void)opcode;
+    HandleException(0x0B);
 }
 
 void MIPS::op_cop2(uint32_t opcode) {
@@ -282,6 +295,7 @@ void MIPS::op_cop2(uint32_t opcode) {
             _regs.SetCOP2Control(rd, _regs.GetGPR(rt));
             break;
         case 0x10:
+            _gte.Execute(opcode);
             break;
         default:
             op_unknown(opcode);
@@ -301,6 +315,16 @@ void MIPS::op_swc2(uint32_t opcode) {
     uint32_t rt = Rt(opcode);
     uint32_t addr = _regs.GetGPR(rs) + static_cast<uint32_t>(Simm16(opcode));
     _bus.Write32(addr, _regs.GetCOP2(rt));
+}
+
+void MIPS::op_lwc1(uint32_t opcode) {
+    (void)opcode;
+    HandleException(0x0B);
+}
+
+void MIPS::op_swc1(uint32_t opcode) {
+    (void)opcode;
+    HandleException(0x0B);
 }
 
 }

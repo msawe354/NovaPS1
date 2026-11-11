@@ -92,7 +92,33 @@ void GTE::PushSaturationFlags(int64_t mac1, int64_t mac2, int64_t mac3) {
 
 void GTE::Execute(uint32_t opcode) {
     uint32_t func = opcode & 0x3F;
-    (void)func;
+    switch (func) {
+        case 0x00: gte::NCLIP(*this, opcode); break;
+        case 0x01: gte::RTPS(*this, opcode); break;
+        case 0x02: gte::NCS(*this, opcode); break;
+        case 0x03: gte::NCT(*this, opcode); break;
+        case 0x04: gte::SQR(*this, opcode); break;
+        case 0x05: gte::OP(*this, opcode); break;
+        case 0x06: gte::DPCS(*this, opcode); break;
+        case 0x07: gte::INTPL(*this, opcode); break;
+        case 0x08: gte::MVMVA(*this, opcode); break;
+        case 0x09: gte::NCDS(*this, opcode); break;
+        case 0x0A: gte::CDP(*this, opcode); break;
+        case 0x0B: gte::NCDT(*this, opcode); break;
+        case 0x0C: gte::CC(*this, opcode); break;
+        case 0x0D: gte::NCCS(*this, opcode); break;
+        case 0x0E: gte::NCCT(*this, opcode); break;
+        case 0x10: gte::GPF(*this, opcode); break;
+        case 0x11: gte::GPL(*this, opcode); break;
+        case 0x12: gte::DPCL(*this, opcode); break;
+        case 0x13: gte::DPCT(*this, opcode); break;
+        case 0x14: gte::AVSZ3(*this, opcode); break;
+        case 0x15: gte::AVSZ4(*this, opcode); break;
+        case 0x16: gte::RTPT(*this, opcode); break;
+        case 0x17: gte::DPST(*this, opcode); break;
+        default:
+            break;
+    }
 }
 
 }

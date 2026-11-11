@@ -3,7 +3,8 @@
 #include "TLB/TLB.hpp"
 #include "Cache/Cache.hpp"
 #include "Interrupts/Interrupts.hpp"
-#include "../Memory/Bus.hpp"
+#include "GTE/GTE.hpp"
+#include "../Bus/Bus.hpp"
 #include <cstdint>
 #include <array>
 
@@ -24,6 +25,7 @@ public:
     Cache& GetICache() { return _icache; }
     Cache& GetDCache() { return _dcache; }
     Interrupts& GetInterrupts() { return _interrupts; }
+    GTE& GetGTE() { return _gte; }
 
     uint32_t GetPC() const { return _regs.GetPC(); }
     uint64_t GetCycleCount() const { return _cycleCount; }
@@ -31,6 +33,7 @@ public:
     void SetBranchTarget(uint32_t target);
     bool IsInDelaySlot() const { return _inDelaySlot; }
     void HandleException(uint32_t cause);
+    void QueueLoadWrite(uint32_t reg, uint32_t value);
 
 private:
     using OpcodeHandler = void (*)(MIPS&, uint32_t);
@@ -41,6 +44,7 @@ private:
     Cache _icache;
     Cache _dcache;
     Interrupts _interrupts;
+    GTE _gte;
 
     std::array<OpcodeHandler, 64> _primaryTable;
     std::array<OpcodeHandler, 64> _specialTable;
@@ -53,6 +57,9 @@ private:
     uint32_t _delaySlotTarget;
     bool _inDelaySlot;
     uint64_t _cycleCount;
+    bool _loadDelayValid;
+    uint32_t _loadDelayReg;
+    uint32_t _loadDelayValue;
 
     void InitTables();
     void Execute(uint32_t opcode);
@@ -74,6 +81,8 @@ private:
     void op_cop2(uint32_t opcode);
     void op_lwc2(uint32_t opcode);
     void op_swc2(uint32_t opcode);
+    void op_lwc1(uint32_t opcode);
+    void op_swc1(uint32_t opcode);
 };
 
 }
