@@ -1,6 +1,7 @@
 #include "Core/Emulator.hpp"
 #include <iostream>
 #include <string>
+#include <algorithm>
 
 static void PrintBanner() {
     std::cout << "╔══════════════════════════════════╗" << std::endl;
@@ -17,6 +18,12 @@ static void PrintUsage(const char* program) {
     std::cout << "  " << program << " scph1001.bin" << std::endl;
     std::cout << "  " << program << " scph1001.bin crash.exe" << std::endl;
     std::cout << "  " << program << " scph1001.bin tekken.iso" << std::endl;
+}
+
+static bool EndsWithCI(const std::string& str, const std::string& suffix) {
+    if (str.size() < suffix.size()) return false;
+    return std::equal(suffix.rbegin(), suffix.rend(), str.rbegin(),
+        [](char a, char b) { return std::tolower(a) == std::tolower(b); });
 }
 
 int main(int argc, char* argv[]) {
@@ -45,7 +52,7 @@ int main(int argc, char* argv[]) {
     if (argc >= 3) {
         std::string gamePath = argv[2];
 
-        if (gamePath.find(".exe") != std::string::npos) {
+        if (EndsWithCI(gamePath, ".exe")) {
             if (!emu.LoadExe(gamePath)) {
                 std::cerr << "[main] Failed to load EXE: " << gamePath << std::endl;
                 return 1;
